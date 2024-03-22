@@ -23,9 +23,9 @@ inputs:
   releaseName:
     description: "The name of this release. If not set it's generated automatically from the APKs versionName"
     required: false
-  track:
-    description: "The track in which you want to assign the uploaded app."
-    default: 'production'
+  tracks:
+    description: "The tracks in which you want to assign the uploaded app."
+    default: ''
     required: true
   inAppUpdatePriority:
     description: "In-app update priority of the release. All newly added APKs in the release will be considered at this priority. Can take values in the range [0, 5], with 5 the highest priority. Defaults to 0."
