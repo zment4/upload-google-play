@@ -35,7 +35,7 @@ export interface EditOptions {
 
 export async function runUpload(
     packageName: string,
-    track: string,
+    tracks: string[],
     inAppUpdatePriority: number | undefined,
     userFraction: number | undefined,
     whatsNewDir: string | undefined,
@@ -54,7 +54,7 @@ export async function runUpload(
     const result = await uploadToPlayStore({
         auth: auth,
         applicationId: packageName,
-        track: track,
+        tracks: tracks,
         inAppUpdatePriority: inAppUpdatePriority || 0,
         userFraction: userFraction,
         whatsNewDir: whatsNewDir,
@@ -74,53 +74,43 @@ export async function runUpload(
 async function uploadToPlayStore(options: EditOptions, releaseFiles: string[]): Promise<string | void> {
     const internalSharingDownloadUrls: string[] = []
     
-    // Check the 'track' for 'internalsharing', if so switch to a non-track api
-    if (options.track === 'internalsharing') {
-        core.debug("Track is Internal app sharing, switch to special upload api")
-        for (const releaseFile of releaseFiles) {
-            core.debug(`Uploading ${releaseFile}`);
-            const url = await uploadInternalSharingRelease(options, releaseFile)
-            internalSharingDownloadUrls.push(url)
-        }
-    } else {
-        // Create a new Edit
-        const appEditId = await getOrCreateEdit(options)
-
-        // Validate the given track
-        await validateSelectedTrack(appEditId, options)
-
-        // Upload artifacts to Google Play, and store their version codes
-        const versionCodes = await uploadReleaseFiles(appEditId, options, releaseFiles)
-
-        // Infer the download URL from the version codes
-        for (const versionCode of versionCodes) {
-            const url = inferInternalSharingDownloadUrl(options.applicationId, versionCode);
-            core.setOutput("internalSharingDownloadUrl", url);
-            core.exportVariable("INTERNAL_SHARING_DOWNLOAD_URL", url);      
-            internalSharingDownloadUrls.push(url);
-        }
-
-        // Add the uploaded artifacts to the Edit track
-        await addReleasesToTrack(appEditId, options, versionCodes);
-
-        // Commit the pending Edit
-        core.info(`Committing the Edit`)
-        const res = await androidPublisher.edits.commit({
-            auth: options.auth,
-            editId: appEditId,
-            packageName: options.applicationId,
-            changesNotSentForReview: options.changesNotSentForReview
-        });
-
-        // Simple check to see whether commit was successful
-        if (res.data.id) {
-            core.info(`Successfully committed ${res.data.id}`);
-            return res.data.id
-        } else {
-            core.setFailed(`Error ${res.status}: ${res.statusText}`);
-            return Promise.reject(res.status);
-        }
-    }
+	// Create a new Edit
+	const appEditId = await getOrCreateEdit(options)
+	
+	// Validate the given track
+	await validateSelectedTrack(appEditId, options)
+	
+	// Upload artifacts to Google Play, and store their version codes
+	const versionCodes = await uploadReleaseFiles(appEditId, options, releaseFiles)
+	
+	// Infer the download URL from the version codes
+	for (const versionCode of versionCodes) {
+	    const url = inferInternalSharingDownloadUrl(options.applicationId, versionCode);
+	    core.setOutput("internalSharingDownloadUrl", url);
+	    core.exportVariable("INTERNAL_SHARING_DOWNLOAD_URL", url);      
+	    internalSharingDownloadUrls.push(url);
+	}
+	
+	// Add the uploaded artifacts to the Edit track
+	await addReleasesToTrack(appEditId, options, versionCodes);
+	
+	// Commit the pending Edit
+	core.info(`Committing the Edit`)
+	const res = await androidPublisher.edits.commit({
+	    auth: options.auth,
+	    editId: appEditId,
+	    packageName: options.applicationId,
+	    changesNotSentForReview: options.changesNotSentForReview
+	});
+	
+	// Simple check to see whether commit was successful
+	if (res.data.id) {
+	    core.info(`Successfully committed ${res.data.id}`);
+	    return res.data.id
+	} else {
+	    core.setFailed(`Error ${res.status}: ${res.statusText}`);
+	    return Promise.reject(res.status);
+	}
 
     core.setOutput("internalSharingDownloadUrls", internalSharingDownloadUrls);
     core.exportVariable("INTERNAL_SHARING_DOWNLOAD_URLS", internalSharingDownloadUrls);    
@@ -182,26 +172,28 @@ async function addReleasesToTrack(appEditId: string, options: EditOptions, versi
     core.debug(`status=${status}`)
     core.debug(`versionCodes=${versionCodes.toString()}`)
 
-    const res = await androidPublisher.edits.tracks
-        .update({
-            auth: options.auth,
-            editId: appEditId,
-            packageName: options.applicationId,
-            track: options.track,
-            requestBody: {
-                track: options.track,
-                releases: [
-                    {
-                        name: options.name,
-                        userFraction: options.userFraction,
-                        status: status,
-                        inAppUpdatePriority: options.inAppUpdatePriority,
-                        releaseNotes: await readLocalizedReleaseNotes(options.whatsNewDir),
-                        versionCodes: versionCodes.filter(x => x != 0).map(x => x.toString())
-                    }
-                ]
-            }
-        });
+    for (const track of options.tracks) {
+	    const res = await androidPublisher.edits.tracks
+	        .update({
+	            auth: options.auth,
+	            editId: appEditId,
+	            packageName: options.applicationId,
+	            track: track,
+	            requestBody: {
+	                track: track,
+	                releases: [
+	                    {
+	                        name: options.name,
+	                        userFraction: options.userFraction,
+	                        status: status,
+	                        inAppUpdatePriority: options.inAppUpdatePriority,
+	                        releaseNotes: await readLocalizedReleaseNotes(options.whatsNewDir),
+	                        versionCodes: versionCodes.filter(x => x != 0).map(x => x.toString())
+	                    }
+	                ]
+	            }
+	        });
+    }
 
     return res.data;
 }
