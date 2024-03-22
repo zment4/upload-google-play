@@ -10,12 +10,13 @@ export async function run() {
         const serviceAccountJson = core.getInput('serviceAccountJson', { required: false });
         const serviceAccountJsonRaw = core.getInput('serviceAccountJsonPlainText', { required: false});
         const packageName = core.getInput('packageName', { required: true });
-        const releaseFile = core.getInput('releaseFile', { required: false });
         const releaseFiles = core.getInput('releaseFiles', { required: false })
             ?.split(',')
             ?.filter(x => x !== '');
         const releaseName = core.getInput('releaseName', { required: false });
-        const track = core.getInput('track', { required: true });
+        const tracks = core.getInput('tracks', { required: true })
+            ?.split(',')
+            ?.filter(x => x !== '');
         const inAppUpdatePriority = core.getInput('inAppUpdatePriority', { required: false });
         const userFraction = core.getInput('userFraction', { required: false })
         const status = core.getInput('status', { required: false });
@@ -48,11 +49,7 @@ export async function run() {
         }
         await validateInAppUpdatePriority(inAppUpdatePriorityInt)
 
-        // Check release files while maintaining backward compatibility
-        if (releaseFile) {
-            core.warning(`WARNING!! 'releaseFile' is deprecated and will be removed in a future release. Please migrate to 'releaseFiles'`)
-        }
-        const validatedReleaseFiles: string[] = await validateReleaseFiles(releaseFiles ?? [releaseFile])
+        const validatedReleaseFiles: string[] = await validateReleaseFiles(releaseFiles)
 
         if (whatsNewDir != undefined && whatsNewDir.length > 0 && !fs.existsSync(whatsNewDir)) {
             core.warning(`Unable to find 'whatsnew' directory @ ${whatsNewDir}`);
@@ -69,7 +66,7 @@ export async function run() {
         await pTimeout(
             runUpload(
                 packageName,
-                track,
+                tracks,
                 inAppUpdatePriorityInt,
                 userFractionFloat,
                 whatsNewDir,
